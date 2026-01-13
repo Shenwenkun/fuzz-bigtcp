@@ -1,0 +1,31 @@
+[package]
+name = "aster-bigtcp-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+aster-bigtcp = { path = "../aster-bigtcp", default-features = false, features = ["user"] }
+bigtcp_user = { path = "../bigtcp_user" }
+smoltcp = { git = "https://github.com/asterinas/smoltcp", tag = "r_2024-11-08_f07e5b5", default-features = false, features = [
+    "alloc",
+    "log",
+    "medium-ethernet",
+    "medium-ip",
+    "proto-ipv4",
+    "socket-udp",
+    "socket-tcp",
+] }
+
+
+[[bin]] 
+name = "fuzz_target_1" 
+path = "./fuzz_targets/fuzz_target_1.rs" 
+test = false 
+doc = false 
+bench = false
+

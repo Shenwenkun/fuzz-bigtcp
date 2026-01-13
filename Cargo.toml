@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "aster-bigtcp",
+    "bigtcp_user",
+    "fuzz",
+]

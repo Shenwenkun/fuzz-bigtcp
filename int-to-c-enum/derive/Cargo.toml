@@ -1,0 +1,19 @@
+[package]
+name = "int-to-c-enum-derive"
+version = "0.1.0"
+description = "int-to-c-enum's proc macros"
+repository = "https://github.com/asterinas/asterinas"
+license = "MPL-2.0"
+edition = "2024"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = { version = "1.0.95", features = ["span-locations"] }
+quote = "1.0.35"
+syn = { version = "2.0.77", features = ["full", "parsing", "fold"] }
+
+[lints]
