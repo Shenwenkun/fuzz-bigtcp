@@ -7,7 +7,7 @@ use alloc::{
 use core::ops::{Deref, DerefMut};
 
 #[cfg(feature = "user")] 
-use bigtcp_user::mock::{BottomHalfDisabled, SpinLock, SpinLockGuard};
+use bigtcp_kernel_mock::mock::{BottomHalfDisabled, SpinLock, SpinLockGuard};
 
 use smoltcp::{
     socket::{PollAt, tcp::State},

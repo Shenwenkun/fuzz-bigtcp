@@ -12,7 +12,7 @@ checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
 name = "aster-bigtcp"
 version = "0.1.0"
 dependencies = [
- "bigtcp_user",
+ "bigtcp_kernel_mock",
  "bitflags",
  "int-to-c-enum",
  "jhash",
@@ -26,14 +26,23 @@ name = "aster-bigtcp-fuzz"
 version = "0.0.0"
 dependencies = [
  "aster-bigtcp",
+ "bigtcp_kernel_mock",
  "bigtcp_user",
  "libfuzzer-sys",
  "smoltcp",
 ]
 
 [[package]]
+name = "bigtcp_kernel_mock"
+version = "0.1.0"
+
+[[package]]
 name = "bigtcp_user"
 version = "0.1.0"
+dependencies = [
+ "aster-bigtcp",
+ "smoltcp",
+]
 
 [[package]]
 name = "bitflags"

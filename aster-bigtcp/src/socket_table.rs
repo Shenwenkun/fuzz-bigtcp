@@ -9,7 +9,7 @@ use core::net::Ipv4Addr;
 use jhash::{jhash_1vals, jhash_3vals};
 
 #[cfg(feature = "user")]
-use bigtcp_user::const_assert;
+use bigtcp_kernel_mock::const_assert;
 
 use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint};
 

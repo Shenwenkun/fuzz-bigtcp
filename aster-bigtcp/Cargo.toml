@@ -21,7 +21,7 @@ smoltcp = { git = "https://github.com/asterinas/smoltcp", tag = "r_2024-11-08_f0
 ] }
 spin = "0.9.4"
 takeable = "0.2.2"
-bigtcp_user = { path = "../bigtcp_user" }
+bigtcp_kernel_mock ={ path = "../bigtcp_kernel_mock" }
 
 [lints]
 

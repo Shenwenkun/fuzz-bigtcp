@@ -4,7 +4,7 @@ use alloc::{boxed::Box, sync::Arc};
 use core::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(feature = "user")] 
-use bigtcp_user::mock::{BottomHalfDisabled, SpinLock};
+use bigtcp_kernel_mock::mock::{BottomHalfDisabled, SpinLock};
 
 
 

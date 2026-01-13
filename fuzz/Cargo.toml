@@ -11,6 +11,7 @@ cargo-fuzz = true
 libfuzzer-sys = "0.4"
 aster-bigtcp = { path = "../aster-bigtcp", default-features = false, features = ["user"] }
 bigtcp_user = { path = "../bigtcp_user" }
+bigtcp_kernel_mock ={ path = "../bigtcp_kernel_mock"}
 smoltcp = { git = "https://github.com/asterinas/smoltcp", tag = "r_2024-11-08_f07e5b5", default-features = false, features = [
     "alloc",
     "log",
@@ -29,3 +30,9 @@ test = false
 doc = false 
 bench = false
 
+[[bin]] 
+name = "fuzz_target_2" 
+path = "./fuzz_targets/fuzz_target_2.rs" 
+test = false 
+doc = false 
+bench = false

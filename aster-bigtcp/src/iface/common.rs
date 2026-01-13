@@ -8,8 +8,7 @@ use alloc::{
 };
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
-#[cfg(feature = "user")] 
-use bigtcp_user::mock::{BottomHalfDisabled, SpinLock, SpinLockGuard};
+use bigtcp_kernel_mock::mock::{BottomHalfDisabled, SpinLock, SpinLockGuard};
 
 use bitflags::bitflags;
 use int_to_c_enum::TryFromInt;

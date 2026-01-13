@@ -3,7 +3,7 @@
 use alloc::{collections::btree_map::BTreeMap, string::String, sync::Arc};
 
 #[cfg(feature = "user")] 
-use bigtcp_user::mock::{BottomHalfDisabled, SpinLock};
+use bigtcp_kernel_mock::mock::{BottomHalfDisabled, SpinLock};
 
 use smoltcp::{
     iface::{Config, Context, packet::Packet},

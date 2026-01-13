@@ -3,4 +3,5 @@ members = [
     "aster-bigtcp",
     "bigtcp_user",
     "fuzz",
+    "bigtcp_kernel_mock",
 ]

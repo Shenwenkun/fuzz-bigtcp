@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 #[cfg(feature = "user")]
-use bigtcp_user::mock::Jiffies;
+use bigtcp_kernel_mock::mock::Jiffies;
 
 
 pub(super) fn get_network_timestamp() -> smoltcp::time::Instant {

@@ -3,7 +3,7 @@
 use alloc::{boxed::Box, collections::btree_map::BTreeMap, sync::Arc, vec::Vec};
 
 #[cfg(feature = "user")] 
-use bigtcp_user::mock::{SpinLock,BottomHalfDisabled};
+use bigtcp_kernel_mock::mock::{SpinLock,BottomHalfDisabled};
 
 use smoltcp::{
     socket::PollAt,
