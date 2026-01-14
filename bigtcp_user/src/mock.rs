@@ -97,20 +97,22 @@ pub struct MockRxToken;
 pub struct MockTxToken;
 
 impl smoltcp::phy::RxToken for MockRxToken {
-    fn consume<R, F>(self, _f: F) -> R
+    fn consume<R, F>(self, f: F) -> R
     where
         F: FnOnce(& [u8]) -> R,
     {
-        unreachable!()
+        f(&[])
     }
 }
 
 impl smoltcp::phy::TxToken for MockTxToken {
-    fn consume<R, F>(self, _len: usize, _f: F) -> R
+    fn consume<R, F>(self, len: usize, f: F) -> R
     where
         F: FnOnce(&mut [u8]) -> R,
     {
-        unreachable!()
+        // 分配一个 len 大小的 buffer 
+        let mut buf = vec![0u8; len]; 
+        f(&mut buf)
     }
 }
 
