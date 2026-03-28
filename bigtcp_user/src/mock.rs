@@ -19,7 +19,7 @@ pub struct MockDevice;
 
 impl Device for MockDevice {
     type RxToken<'a> = MockRxToken;
-    type TxToken<'a> = MockTxToken;
+    type TxToken<'a> = MockTxTokenEmpty;
 
     fn capabilities(&self) -> smoltcp::phy::DeviceCapabilities {
         let mut caps = smoltcp::phy::DeviceCapabilities::default();
@@ -32,31 +32,54 @@ impl Device for MockDevice {
         None 
     }
 
-    fn transmit(&mut self, _ts: Instant) -> Option<Self::TxToken<'_>> { 
-        Some(MockTxToken) 
+    fn transmit(&mut self, _ts: Instant) -> Option<Self::TxToken<'_>> {
+        Some(MockTxTokenEmpty)
+    }
+
+}
+
+pub struct MockTxTokenEmpty;
+
+impl smoltcp::phy::TxToken for MockTxTokenEmpty {
+    fn consume<R, F>(self, len: usize, f: F) -> R
+    where
+        F: FnOnce(&mut [u8]) -> R,
+    {
+        let mut buf = vec![0u8; len];
+        f(&mut buf[..])
     }
 }
+
 
 //
 // 7. MockDeviceWithRx —— 支持 fuzz 输入作为收到的网络包
 //
 pub struct MockDeviceWithRx {
     pub packet: Option<Vec<u8>>,
+    pub tx_packets: Vec<Vec<u8>>,   // ★ 新增：保存 TX 包
 }
 
 impl MockDeviceWithRx {
     pub fn new() -> Self {
-        Self { packet: None }
+        Self { 
+            packet: None,
+            tx_packets: Vec::new(),
+        }
     }
 
     pub fn inject(&mut self, data: &[u8]) {
         self.packet = Some(data.to_vec());
     }
+
+    pub fn take_tx_packets(&mut self) -> Vec<Vec<u8>> {
+        std::mem::take(&mut self.tx_packets)
+    }
 }
+
 
 impl Device for MockDeviceWithRx {
     type RxToken<'a> = MockRxTokenWithData;
-    type TxToken<'a> = MockTxToken; // 复用之前的 TxToken
+    type TxToken<'a> = MockTxToken<'a>;
 
     fn capabilities(&self) -> DeviceCapabilities {
         let mut caps = DeviceCapabilities::default();
@@ -65,18 +88,26 @@ impl Device for MockDeviceWithRx {
         caps
     }
 
-    fn receive(&mut self, _ts: Instant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
+    fn receive(&mut self, _ts: Instant)
+        -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)>
+    {
         if let Some(data) = self.packet.take() {
-            Some((MockRxTokenWithData(data), MockTxToken))
+            Some((
+                MockRxTokenWithData(data),
+                MockTxToken { tx: &mut self.tx_packets },
+            ))
         } else {
             None
         }
     }
 
-    fn transmit(&mut self,_ts: Instant) -> Option<Self::TxToken<'_>> {
-        Some(MockTxToken)
+    fn transmit(&mut self, _ts: Instant)
+        -> Option<Self::TxToken<'_>>
+    {
+        Some(MockTxToken { tx: &mut self.tx_packets })
     }
 }
+
 
 //
 // RxToken：把 fuzz 输入交给协议栈
@@ -94,7 +125,9 @@ impl RxToken for MockRxTokenWithData {
 }
 
 pub struct MockRxToken;
-pub struct MockTxToken;
+pub struct MockTxToken<'a> {
+    pub tx: &'a mut Vec<Vec<u8>>,
+}
 
 impl smoltcp::phy::RxToken for MockRxToken {
     fn consume<R, F>(self, f: F) -> R
@@ -105,14 +138,18 @@ impl smoltcp::phy::RxToken for MockRxToken {
     }
 }
 
-impl smoltcp::phy::TxToken for MockTxToken {
+impl<'a> smoltcp::phy::TxToken for MockTxToken<'a> {
     fn consume<R, F>(self, len: usize, f: F) -> R
     where
         F: FnOnce(&mut [u8]) -> R,
     {
-        // 分配一个 len 大小的 buffer 
-        let mut buf = vec![0u8; len]; 
-        f(&mut buf)
+        let mut buf = vec![0u8; len];
+        let result = f(&mut buf[..]);
+
+        // ★ 保存 TX 包
+        self.tx.push(buf);
+
+        result
     }
 }
 
@@ -159,17 +196,20 @@ impl aster_bigtcp::ext::Ext for MockExt {
 //
 // 8. MockWithDeviceWithRx —— 让 fuzz 输入真正进入协议栈
 //
+use std::sync::Arc;
+
 pub struct MockWithDeviceWithRx {
-    pub dev: Mutex<MockDeviceWithRx>,
+    pub dev: Arc<Mutex<MockDeviceWithRx>>,
 }
 
 impl MockWithDeviceWithRx {
     pub fn new() -> Self {
         Self {
-            dev: Mutex::new(MockDeviceWithRx::new()),
+            dev: Arc::new(Mutex::new(MockDeviceWithRx::new())),
         }
     }
 }
+
 
 impl WithDevice for MockWithDeviceWithRx {
     type Device = MockDeviceWithRx;
@@ -182,3 +222,4 @@ impl WithDevice for MockWithDeviceWithRx {
         f(&mut *guard)
     }
 }
+

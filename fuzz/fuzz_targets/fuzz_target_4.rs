@@ -9,7 +9,22 @@ use bigtcp_kernel_mock::mock::Jiffies;
 use aster_bigtcp::iface::Iface;
 use std::sync::Arc;
 
-// -------------------- 新增：合法 IPv4/TCP 包构造器 --------------------
+// -------------------- TCP 构造器 --------------------
+use smoltcp::wire::{TcpControl, Ipv4Repr, Ipv4Packet, TcpRepr, TcpPacket, IpProtocol, TcpSeqNumber};
+use smoltcp::phy::ChecksumCapabilities;
+
+// 从 payload 中解析 seq/ack + data：
+// payload = [ seq(4) | ack(4) | data... ]
+fn split_seq_ack_payload(payload: &[u8]) -> Option<(u32, u32, &[u8])> {
+    if payload.len() < 8 {
+        return None;
+    }
+    let seq = u32::from_le_bytes(payload[0..4].try_into().ok()?);
+    let ack = u32::from_le_bytes(payload[4..8].try_into().ok()?);
+    let data = &payload[8..];
+    Some((seq, ack, data))
+}
+
 fn build_syn(payload: &[u8]) -> Vec<u8> {
     use smoltcp::wire::{
         Ipv4Repr, Ipv4Packet, TcpRepr, TcpPacket,
@@ -70,11 +85,10 @@ fn build_syn(payload: &[u8]) -> Vec<u8> {
     buffer
 }
 
-use smoltcp::wire::{TcpControl};
-
 fn build_tcp_with_control(
     control: TcpControl,
     payload: &[u8],
+    last_server_seq: Option<i32>,
 ) -> Vec<u8> {
     use smoltcp::wire::{
         Ipv4Repr, Ipv4Packet, TcpRepr, TcpPacket,
@@ -95,7 +109,7 @@ fn build_tcp_with_control(
         dst_port: 80,
         control,
         seq_number: TcpSeqNumber(seq as i32),
-        ack_number: Some(TcpSeqNumber(ack as i32)),
+        ack_number: last_server_seq.map(|s| TcpSeqNumber(s + 1)),
         window_len: 1024,
         window_scale: None,
         max_seg_size: None,
@@ -135,38 +149,62 @@ fn build_tcp_with_control(
 }
 
 
-fn build_ack(payload: &[u8]) -> Vec<u8> {
-    build_tcp_with_control(TcpControl::None, payload)
-}
-
-fn build_fin(payload: &[u8]) -> Vec<u8> {
-    build_tcp_with_control(TcpControl::Fin, payload)
-}
-
-fn build_rst(payload: &[u8]) -> Vec<u8> {
-    build_tcp_with_control(TcpControl::Rst, payload)
-}
-
-fn build_data(payload: &[u8]) -> Vec<u8> {
-    build_tcp_with_control(TcpControl::Psh, payload)
+fn build_ack(payload: &[u8], last_server_seq: Option<i32>) -> Vec<u8> {
+    build_tcp_with_control(TcpControl::None, payload, last_server_seq)
 }
 
 
+fn build_fin(payload: &[u8], last_server_seq: Option<i32>) -> Vec<u8> {
+    build_tcp_with_control(TcpControl::Fin, payload, last_server_seq)
+}
+
+fn build_rst(payload: &[u8], last_server_seq: Option<i32>) -> Vec<u8> {
+    build_tcp_with_control(TcpControl::Rst, payload, last_server_seq)
+}
+
+fn build_data(payload: &[u8], last_server_seq: Option<i32>) -> Vec<u8> {
+    build_tcp_with_control(TcpControl::Psh, payload, last_server_seq)
+}
 
 
 
-fn build_tcp_packet(ptype: u8, payload: &[u8]) -> Vec<u8> {
+
+
+fn build_tcp_packet(ptype: u8, payload: &[u8], last_server_seq: Option<i32>) -> Vec<u8> {
     match ptype {
         0x01 => build_syn(payload),
-        0x02 => build_ack(payload),
-        0x03 => build_fin(payload),
-        0x04 => build_rst(payload),
-        0x05 => build_data(payload),
+        0x02 => build_ack(payload, last_server_seq),
+        0x03 => build_fin(payload, last_server_seq),
+        0x04 => build_rst(payload, last_server_seq),
+        0x05 => build_data(payload, last_server_seq),
         _    => build_syn(payload),
     }
 }
 
 
+
+// -------------------- 解析 IPv4+TCP，用于从 TX 包里提取 SYN+ACK --------------------
+fn parse_ipv4_tcp(pkt: &[u8]) -> Option<(Ipv4Repr, TcpRepr)> {
+    use smoltcp::wire::{Ipv4Packet, TcpPacket, IpProtocol};
+
+    let ipv4 = Ipv4Packet::new_checked(pkt).ok()?;
+    if ipv4.next_header() != IpProtocol::Tcp {
+        return None;
+    }
+
+    let ip_repr = Ipv4Repr::parse(&ipv4, &ChecksumCapabilities::default()).ok()?;
+
+
+    let tcp = TcpPacket::new_checked(ipv4.payload()).ok()?;
+    let tcp_repr = TcpRepr::parse(
+        &tcp,
+        &ip_repr.src_addr.into(),
+        &ip_repr.dst_addr.into(),
+        &ChecksumCapabilities::default(),
+    ).ok()?;
+
+    Some((ip_repr, tcp_repr))
+}
 
 
 
@@ -195,13 +233,16 @@ fn parse_framed_packets(data: &[u8]) -> Vec<(u8, &[u8])> {
 
 fuzz_target!(|data: &[u8]| {
     let dev = MockWithDeviceWithRx::new();
+    let dev_handle = dev.dev.clone();   // Arc<Mutex<MockDeviceWithRx>>
 
     let packets = parse_framed_packets(data);
+    let mut last_server_seq: Option<i32> = None;
+
 
     {
         let mut inner = dev.dev.lock().unwrap();
         for (ptype, payload) in packets {
-            let pkt = build_tcp_packet(ptype, payload);
+            let pkt = build_tcp_packet(ptype, payload, last_server_seq);
             inner.inject(&pkt);
         }
     }
@@ -247,6 +288,22 @@ fuzz_target!(|data: &[u8]| {
         iface.poll();
         now += 10;
         Jiffies::set(now);
+
+        // 从 TX 捕获 SYN+ACK，更新 last_server_seq
+        {
+            let mut guard = dev_handle.lock().unwrap();
+            let txs = guard.take_tx_packets();
+            drop(guard);
+
+            for pkt in txs {
+                if let Some((_ip, tcp)) = parse_ipv4_tcp(&pkt) {
+                    if tcp.control == TcpControl::Syn && tcp.ack_number.is_some() {
+                        last_server_seq = Some(tcp.seq_number.0);
+                    }
+                }
+            }
+        }
+
 
         if now > 1_000_000 {
             break;
