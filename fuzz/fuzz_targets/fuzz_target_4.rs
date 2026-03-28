@@ -8,22 +8,11 @@ use bigtcp_user::mock::{MockWithDeviceWithRx, MockExt, MockScheduleNextPoll};
 use bigtcp_kernel_mock::mock::Jiffies;
 use aster_bigtcp::iface::Iface;
 use std::sync::Arc;
+use smoltcp::wire::TcpTimestampRepr;
 
 // -------------------- TCP 构造器 --------------------
 use smoltcp::wire::{TcpControl, Ipv4Repr, Ipv4Packet, TcpRepr, TcpPacket, IpProtocol, TcpSeqNumber};
 use smoltcp::phy::ChecksumCapabilities;
-
-// 从 payload 中解析 seq/ack + data：
-// payload = [ seq(4) | ack(4) | data... ]
-fn split_seq_ack_payload(payload: &[u8]) -> Option<(u32, u32, &[u8])> {
-    if payload.len() < 8 {
-        return None;
-    }
-    let seq = u32::from_le_bytes(payload[0..4].try_into().ok()?);
-    let ack = u32::from_le_bytes(payload[4..8].try_into().ok()?);
-    let data = &payload[8..];
-    Some((seq, ack, data))
-}
 
 fn build_syn(payload: &[u8]) -> Vec<u8> {
     use smoltcp::wire::{
@@ -101,21 +90,81 @@ fn build_tcp_with_control(
     }
 
     let seq = u32::from_le_bytes(payload[0..4].try_into().unwrap());
-    let ack = u32::from_le_bytes(payload[4..8].try_into().unwrap());
+    // let ack = u32::from_le_bytes(payload[4..8].try_into().unwrap());
     let data = &payload[8..];
+
+    let use_wrong = seq % 5 == 0;
+
+    let (seq_number, ack_number) = if use_wrong {
+        // 错误 seq/ack → 触发重传
+        let wrong_seq = TcpSeqNumber(seq.wrapping_add(500_000) as i32);
+        let wrong_ack = last_server_seq.map(|s| TcpSeqNumber(s.wrapping_add(999_999)));
+        (wrong_seq, wrong_ack)
+    } else {
+        // 正常 seq/ack → 走正常路径
+        let normal_seq = TcpSeqNumber(seq as i32);
+        let normal_ack = last_server_seq.map(|s| TcpSeqNumber(s + 1));
+        (normal_seq, normal_ack)
+    };
+
+    // ---- 阶段 5：SACK / timestamp / window_scale fuzzing ----
+    let r = payload.len() as u32;
+
+    // 10% 概率启用 SACK permitted
+    let sack_permitted = r % 10 == 0;
+
+    // 10% 概率启用 window scale
+    let window_scale = if r % 10 == 1 {
+        Some((r % 8) as u8)   // window scale 0~7
+    } else {
+        None
+    };
+
+    // 10% 概率 fuzz MSS
+    let max_seg_size = if r % 10 == 2 {
+        Some(500 + (r % 1000) as u16)   // 500~1500
+    } else {
+        None
+    };
+
+    // 10% 概率 fuzz timestamp
+    let timestamp = if r % 10 == 3 {
+        Some(TcpTimestampRepr {
+            tsval: (r * 1234567) as u32,
+            tsecr: (r * 7654321) as u32,
+        })
+    } else {
+        None
+    };
+
+    // 10% 概率 fuzz SACK ranges（最多 3 个）
+    let mut sack_ranges = [None, None, None];
+    if r % 10 == 4 {
+        let base = seq as u32;
+        sack_ranges[0] = Some((base.wrapping_add(100), base.wrapping_add(200)));
+    }
+    if r % 20 == 5 {
+        let base = seq as u32;
+        sack_ranges[1] = Some((base.wrapping_add(300), base.wrapping_add(400)));
+    }
+    if r % 30 == 6 {
+        let base = seq as u32;
+        sack_ranges[2] = Some((base.wrapping_add(500), base.wrapping_add(600)));
+    }
+
 
     let tcp_repr = TcpRepr {
         src_port: 12345,
         dst_port: 80,
         control,
-        seq_number: TcpSeqNumber(seq as i32),
-        ack_number: last_server_seq.map(|s| TcpSeqNumber(s + 1)),
+        seq_number,
+        ack_number,
         window_len: 1024,
-        window_scale: None,
-        max_seg_size: None,
-        sack_permitted: false,
-        sack_ranges: [None, None, None],
-        timestamp: None,
+        window_scale,
+        max_seg_size,
+        sack_permitted,
+        sack_ranges,
+        timestamp,
         payload: data,
     };
 
@@ -184,7 +233,7 @@ fn build_tcp_packet(ptype: u8, payload: &[u8], last_server_seq: Option<i32>) -> 
 
 
 // -------------------- 解析 IPv4+TCP，用于从 TX 包里提取 SYN+ACK --------------------
-fn parse_ipv4_tcp(pkt: &[u8]) -> Option<(Ipv4Repr, TcpRepr)> {
+fn parse_ipv4_tcp(pkt: &[u8]) -> Option<(Ipv4Repr, TcpRepr<'_>)> {
     use smoltcp::wire::{Ipv4Packet, TcpPacket, IpProtocol};
 
     let ipv4 = Ipv4Packet::new_checked(pkt).ok()?;
@@ -235,16 +284,103 @@ fuzz_target!(|data: &[u8]| {
     let dev = MockWithDeviceWithRx::new();
     let dev_handle = dev.dev.clone();   // Arc<Mutex<MockDeviceWithRx>>
 
-    let packets = parse_framed_packets(data);
+    let mut conns = Vec::new();
+    let mut i = 0;
+
+    // 最多 3 个连接（太多会压死正常路径）
+    while i < data.len() && conns.len() < 3 {
+        let len = (data[i] as usize % 40) + 5; // 每个连接最多 40 bytes
+        let end = (i + len).min(data.len());
+        conns.push(parse_framed_packets(&data[i..end]));
+        i = end;
+    }
+
+    let mut extra_payloads: Vec<Vec<u8>> = Vec::new();
+
+
+    for packets in &mut conns {
+        if packets.is_empty() {
+            continue;
+        }
+
+        let payload = packets[0].1;
+        let r = payload.len() as u32;
+
+        // ---- DATA 注入（10%）----
+        if r % 10 == 0 {
+            packets.push((0x05, packets[0].1));
+        }
+
+        // ---- FIN 注入（3%）----
+        if r % 30 == 0 {
+            packets.push((0x03, packets[0].1));
+        }
+
+        // ---- RST 注入（3%）----
+        if r % 30 == 1 {
+            packets.push((0x04, packets[0].1));
+        }
+
+        // ---- 大 payload 注入（10%）----
+        if r % 10 == 1 && payload.len() < 1500 {
+            let mut big = Vec::from(payload);
+            big.resize(1500, 0x41);
+            extra_payloads.push(big);
+            // 关键：用 raw pointer 避免 borrow checker 冲突
+            let ptr = extra_payloads.last().unwrap().as_ptr();
+            let len = extra_payloads.last().unwrap().len();
+
+            // 现在 big_ref 不再借用 extra_payloads，而是独立的 slice
+            let big_ref: &[u8] = unsafe { std::slice::from_raw_parts(ptr, len) };
+
+            packets.push((0x05, big_ref));
+        }
+
+        if r % 20 == 0 {
+            let syn_flood_count = (r % 20) as usize; // 0~19 个额外 SYN
+            for _ in 0..syn_flood_count {
+                packets.push((0x01, &[])); // 0x01 = SYN
+            }
+        }
+
+        // ---- 阶段 8：多次 FIN/RST/错误 seq 交错 ----
+        // 5% 概率触发 deep state fuzzing
+        if r % 20 == 1 {
+            let repeat = (r % 5) + 2; // 重复 2~6 次
+
+            for _ in 0..repeat {
+                // 多次 FIN
+                if r % 3 == 0 {
+                    packets.push((0x03, packets[0].1));
+                }
+
+                // 多次 RST
+                if r % 3 == 1 {
+                    packets.push((0x04, packets[0].1));
+                }
+
+                // 多次 DATA（可能触发窗口滑动）
+                if r % 3 == 2 {
+                    packets.push((0x05, packets[0].1));
+                }
+            }
+        }
+    }
+
+
     let mut last_server_seq: Option<i32> = None;
 
 
     {
         let mut inner = dev.dev.lock().unwrap();
-        for (ptype, payload) in packets {
-            let pkt = build_tcp_packet(ptype, payload, last_server_seq);
-            inner.inject(&pkt);
+        for conn in &conns {
+
+            for (ptype, payload) in conn {
+                let pkt = build_tcp_packet(*ptype, payload, last_server_seq);
+                inner.inject(&pkt);
+            }
         }
+
     }
 
     let iface: Arc<dyn Iface<MockExt>> =
@@ -269,11 +405,12 @@ fuzz_target!(|data: &[u8]| {
         is_nagle_enabled: true,
     };
 
+    let observer = MockObserver;
+
     let bound = match iface.bind(BindPortConfig::Specified(80)) {
         Ok(b) => b,
-        Err(_) => return, // 这一轮算了
+        Err(_) => return,
     };
-    let observer = MockObserver;
 
     let listener = match TcpListener::<MockExt>::new_listen(bound, 16, &option, observer) {
         Ok(l) => l,
@@ -284,9 +421,17 @@ fuzz_target!(|data: &[u8]| {
 
     let mut now = 0u64;
 
+    
+
+
     for _ in 0..200 {
         iface.poll();
-        now += 10;
+        let jump = now % 7 == 0; // 大约 1/7 概率
+        if jump {
+            now += 2000; // 触发 RTO
+        } else {
+            now += 10;   // 正常时间推进
+        }
         Jiffies::set(now);
 
         // 从 TX 捕获 SYN+ACK，更新 last_server_seq
@@ -309,7 +454,7 @@ fuzz_target!(|data: &[u8]| {
             break;
         }
     }
-
+    
     listener.close();
 
     iface.poll();
