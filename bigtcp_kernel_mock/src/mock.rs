@@ -101,15 +101,26 @@ impl FakeDevice {
 //
 // 6. Mock Jiffies
 //
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static MOCK_JIFFIES: AtomicU64 = AtomicU64::new(0);
+
 pub struct Jiffies;
 
 impl Jiffies {
     pub fn elapsed() -> std::time::Duration {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+        std::time::Duration::from_millis(MOCK_JIFFIES.load(Ordering::Relaxed))
+    }
+
+    pub fn set(ms: u64) {
+        MOCK_JIFFIES.store(ms, Ordering::Relaxed);
+    }
+
+    pub fn advance(ms: u64) {
+        MOCK_JIFFIES.fetch_add(ms, Ordering::Relaxed);
     }
 }
+
 
 
 #[macro_export]

@@ -22,7 +22,6 @@ smoltcp = { git = "https://github.com/asterinas/smoltcp", tag = "r_2024-11-08_f0
     "socket-tcp",
 ] }
 
-
 [[bin]] 
 name = "fuzz_target_1" 
 path = "./fuzz_targets/fuzz_target_1.rs" 
@@ -33,6 +32,20 @@ bench = false
 [[bin]] 
 name = "fuzz_target_2" 
 path = "./fuzz_targets/fuzz_target_2.rs" 
+test = false 
+doc = false 
+bench = false
+
+[[bin]] 
+name = "fuzz_target_3" 
+path = "./fuzz_targets/fuzz_target_3.rs" 
+test = false 
+doc = false 
+bench = false
+
+[[bin]] 
+name = "fuzz_target_4" 
+path = "./fuzz_targets/fuzz_target_4.rs" 
 test = false 
 doc = false 
 bench = false
