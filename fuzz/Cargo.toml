@@ -49,3 +49,10 @@ path = "./fuzz_targets/fuzz_target_4.rs"
 test = false 
 doc = false 
 bench = false
+
+[[bin]] 
+name = "fuzz_target_5" 
+path = "./fuzz_targets/fuzz_target_5.rs" 
+test = false 
+doc = false 
+bench = false
