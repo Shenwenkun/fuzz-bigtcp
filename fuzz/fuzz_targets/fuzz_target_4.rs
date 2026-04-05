@@ -4,14 +4,14 @@ use libfuzzer_sys::fuzz_target;
 use smoltcp::wire::{Ipv4Address, Ipv4Cidr};
 
 use aster_bigtcp::iface::{IpIface, InterfaceFlags, InterfaceType};
-use bigtcp_user::mock::{MockWithDeviceWithRx, MockExt, MockScheduleNextPoll};
+use bigtcp_user::mock::{MockWithDeviceWithRxIp, MockExt, MockScheduleNextPoll};
 use bigtcp_kernel_mock::mock::Jiffies;
 use aster_bigtcp::iface::Iface;
 use std::sync::Arc;
 use smoltcp::wire::TcpTimestampRepr;
 
 // -------------------- TCP 构造器 --------------------
-use smoltcp::wire::{TcpControl, Ipv4Repr, Ipv4Packet, TcpRepr, TcpPacket, IpProtocol, TcpSeqNumber};
+use smoltcp::wire::{TcpControl, Ipv4Repr, TcpRepr};
 use smoltcp::phy::ChecksumCapabilities;
 
 fn build_syn(payload: &[u8]) -> Vec<u8> {
@@ -281,8 +281,8 @@ fn parse_framed_packets(data: &[u8]) -> Vec<(u8, &[u8])> {
 }
 
 fuzz_target!(|data: &[u8]| {
-    let dev = MockWithDeviceWithRx::new();
-    let dev_handle = dev.dev.clone();   // Arc<Mutex<MockDeviceWithRx>>
+    let dev = MockWithDeviceWithRxIp::new();
+    let dev_handle = dev.dev.clone();   // Arc<Mutex<MockDeviceWithRxIp>>
 
     let mut conns = Vec::new();
     let mut i = 0;
@@ -384,7 +384,7 @@ fuzz_target!(|data: &[u8]| {
     }
 
     let iface: Arc<dyn Iface<MockExt>> =
-        IpIface::<MockWithDeviceWithRx, MockExt>::new(
+        IpIface::<MockWithDeviceWithRxIp, MockExt>::new(
             dev,
             Ipv4Cidr::new(Ipv4Address::new(127, 0, 0, 1), 24),
             "fuzz4".into(),

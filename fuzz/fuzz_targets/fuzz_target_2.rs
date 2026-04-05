@@ -3,18 +3,16 @@ use libfuzzer_sys::fuzz_target;
 
 use smoltcp::wire::{Ipv4Address, Ipv4Cidr};
 use aster_bigtcp::iface::{IpIface, InterfaceFlags, InterfaceType};
-use bigtcp_user::mock::{MockWithDeviceWithRx, MockExt, MockScheduleNextPoll};
+use bigtcp_user::mock::{MockWithDeviceWithRxIp, MockExt, MockScheduleNextPoll};
 use aster_bigtcp::iface::Iface;
 
 fuzz_target!(|data: &[u8]| {
-    // 1. 构造 mock 设备
-    let dev = MockWithDeviceWithRx::new();
 
-    // 2. 注入 fuzz 输入
+    let dev = MockWithDeviceWithRxIp::new();
+
     dev.dev.lock().unwrap().inject(data);
 
-    // 3. 构造 iface
-    let iface = IpIface::<MockWithDeviceWithRx, MockExt>::new(
+    let iface = IpIface::<MockWithDeviceWithRxIp, MockExt>::new(
         dev,
         Ipv4Cidr::new(Ipv4Address::new(127, 0, 0, 1), 24),
         "fuzz".into(),

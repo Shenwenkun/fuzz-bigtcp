@@ -3,12 +3,12 @@ use libfuzzer_sys::fuzz_target;
 
 use smoltcp::wire::{Ipv4Address, Ipv4Cidr};
 use aster_bigtcp::iface::{IpIface, InterfaceFlags, InterfaceType};
-use bigtcp_user::mock::{MockWithDeviceWithRx, MockExt, MockScheduleNextPoll};
+use bigtcp_user::mock::{MockWithDeviceWithRxIp, MockExt, MockScheduleNextPoll};
 use aster_bigtcp::iface::Iface;
 
 fuzz_target!(|data: &[u8]| {
     // 1. 构造 mock 设备（还没 move 进 IpIface）
-    let dev = MockWithDeviceWithRx::new();
+    let dev = MockWithDeviceWithRxIp::new();
 
     // 2. 在构造 iface 之前，把 fuzz 输入拆成多包并全部注入
     {
@@ -34,7 +34,7 @@ fuzz_target!(|data: &[u8]| {
     }
 
     // 3. 构造 iface（dev 在这里被 move 进去）
-    let iface = IpIface::<MockWithDeviceWithRx, MockExt>::new(
+    let iface = IpIface::<MockWithDeviceWithRxIp, MockExt>::new(
         dev,
         Ipv4Cidr::new(Ipv4Address::new(127, 0, 0, 1), 24),
         "fuzz3".into(),

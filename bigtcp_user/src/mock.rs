@@ -9,10 +9,7 @@ use smoltcp::phy::{
 use smoltcp::time::Instant;
 
 // bigtcp 的 trait
-use aster_bigtcp::device::WithDevice;
-use aster_bigtcp::ext::Ext;
-use aster_bigtcp::socket::{SocketEventObserver, SocketEvents};
-
+use aster_bigtcp::device::{WithDevice,NotifyDevice};
 
 
 pub struct MockDevice;
@@ -52,14 +49,14 @@ impl smoltcp::phy::TxToken for MockTxTokenEmpty {
 
 
 //
-// 7. MockDeviceWithRx —— 支持 fuzz 输入作为收到的网络包
+// 7. MockDeviceWithRxIp —— 支持 fuzz 输入作为收到的网络包
 //
-pub struct MockDeviceWithRx {
+pub struct MockDeviceWithRxIp {
     pub packet: Option<Vec<u8>>,
     pub tx_packets: Vec<Vec<u8>>,   // ★ 新增：保存 TX 包
 }
 
-impl MockDeviceWithRx {
+impl MockDeviceWithRxIp {
     pub fn new() -> Self {
         Self { 
             packet: None,
@@ -77,7 +74,7 @@ impl MockDeviceWithRx {
 }
 
 
-impl Device for MockDeviceWithRx {
+impl Device for MockDeviceWithRxIp {
     type RxToken<'a> = MockRxTokenWithData;
     type TxToken<'a> = MockTxToken<'a>;
 
@@ -107,6 +104,48 @@ impl Device for MockDeviceWithRx {
         Some(MockTxToken { tx: &mut self.tx_packets })
     }
 }
+
+
+
+pub struct MockDeviceWithRxEth {
+    pub packet: Option<Vec<u8>>,
+    pub tx_packets: Vec<Vec<u8>>,
+}
+
+impl MockDeviceWithRxEth {
+    pub fn new() -> Self {
+        Self { packet: None, tx_packets: Vec::new() }
+    }
+    pub fn inject(&mut self, data: &[u8]) { self.packet = Some(data.to_vec()); }
+    pub fn take_tx_packets(&mut self) -> Vec<Vec<u8>> { std::mem::take(&mut self.tx_packets) }
+}
+
+impl Device for MockDeviceWithRxEth {
+    type RxToken<'a> = MockRxTokenWithData;
+    type TxToken<'a> = MockTxToken<'a>;
+
+    fn capabilities(&self) -> DeviceCapabilities {
+        let mut caps = DeviceCapabilities::default();
+        caps.max_transmission_unit = 1500;
+        caps.medium = Medium::Ethernet;   // 给 EtherIface 用
+        caps
+    }
+
+    fn receive(&mut self, _ts: Instant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
+        if let Some(data) = self.packet.take() {
+            Some((MockRxTokenWithData(data), MockTxToken { tx: &mut self.tx_packets }))
+        } else { None }
+    }
+
+    fn transmit(&mut self, _ts: Instant) -> Option<Self::TxToken<'_>> {
+        Some(MockTxToken { tx: &mut self.tx_packets })
+    }
+}
+
+impl NotifyDevice for MockDeviceWithRxEth {
+    fn notify_poll_end(&mut self) { /* no-op */ }
+}
+
 
 
 //
@@ -194,30 +233,46 @@ impl aster_bigtcp::ext::Ext for MockExt {
 }
 
 //
-// 8. MockWithDeviceWithRx —— 让 fuzz 输入真正进入协议栈
+// 8. MockWithDeviceWithRxIp —— 让 fuzz 输入真正进入协议栈
 //
 use std::sync::Arc;
 
-pub struct MockWithDeviceWithRx {
-    pub dev: Arc<Mutex<MockDeviceWithRx>>,
+pub struct MockWithDeviceWithRxIp {
+    pub dev: Arc<Mutex<MockDeviceWithRxIp>>,
 }
 
-impl MockWithDeviceWithRx {
+impl MockWithDeviceWithRxIp {
     pub fn new() -> Self {
         Self {
-            dev: Arc::new(Mutex::new(MockDeviceWithRx::new())),
+            dev: Arc::new(Mutex::new(MockDeviceWithRxIp::new())),
         }
     }
 }
 
 
-impl WithDevice for MockWithDeviceWithRx {
-    type Device = MockDeviceWithRx;
+impl WithDevice for MockWithDeviceWithRxIp {
+    type Device = MockDeviceWithRxIp;
 
     fn with<F, R>(&self, f: F) -> R
     where
         F: FnOnce(&mut Self::Device) -> R,
     {
+        let mut guard = self.dev.lock().unwrap();
+        f(&mut *guard)
+    }
+}
+
+
+pub struct MockWithDeviceWithRxEth { 
+    pub dev: Arc<Mutex<MockDeviceWithRxEth>>
+}
+
+impl MockWithDeviceWithRxEth {
+    pub fn new() -> Self { Self { dev: Arc::new(Mutex::new(MockDeviceWithRxEth::new())) } }
+}
+impl WithDevice for MockWithDeviceWithRxEth {
+    type Device = MockDeviceWithRxEth;
+    fn with<F, R>(&self, f: F) -> R where F: FnOnce(&mut Self::Device) -> R {
         let mut guard = self.dev.lock().unwrap();
         f(&mut *guard)
     }

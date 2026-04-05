@@ -11,6 +11,7 @@ TARGETS=(
     fuzz_target_3
     fuzz_target_4
     fuzz_target_5
+    fuzz_target_6
 )
 
 echo "[2] 构建所有 fuzz target（带覆盖率）..."

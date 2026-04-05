@@ -9,7 +9,7 @@ use smoltcp::phy::ChecksumCapabilities;
 
 use aster_bigtcp::iface::{IpIface, InterfaceFlags, InterfaceType, Iface, BindPortConfig};
 use aster_bigtcp::socket::UdpSocket;
-use bigtcp_user::mock::{MockWithDeviceWithRx, MockExt, MockScheduleNextPoll, MockObserver};
+use bigtcp_user::mock::{MockWithDeviceWithRxIp, MockExt, MockScheduleNextPoll, MockObserver};
 use bigtcp_kernel_mock::mock::Jiffies;
 
 use std::sync::Arc;
@@ -20,11 +20,11 @@ fuzz_target!(|data: &[u8]| {
     }
 
     // ---- 1. 设备 + iface ----
-    let dev = MockWithDeviceWithRx::new();
+    let dev = MockWithDeviceWithRxIp::new();
     let dev_handle = dev.dev.clone();
 
     let iface: Arc<dyn Iface<MockExt>> =
-        IpIface::<MockWithDeviceWithRx, MockExt>::new(
+        IpIface::<MockWithDeviceWithRxIp, MockExt>::new(
             dev,
             Ipv4Cidr::new(Ipv4Address::new(127, 0, 0, 1), 24),
             "fuzz5".into(),
