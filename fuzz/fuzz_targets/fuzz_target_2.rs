@@ -21,7 +21,6 @@ fuzz_target!(|data: &[u8]| {
         InterfaceFlags::empty(),
     );
 
-    // 4. 只 poll 一次，不要提前 return，不要 unwrap，不要 loop
     for _ in 0..10 {
         let _ = iface.poll();
     }

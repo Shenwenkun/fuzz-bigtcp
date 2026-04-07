@@ -42,8 +42,8 @@ fn build_syn(payload: &[u8]) -> Vec<u8> {
 
     // ---- IPv4 header ----
     let ip_repr = Ipv4Repr {
-        src_addr: Ipv4Address::new(127, 0, 0, 2),   // 随便一个同网段地址
-        dst_addr: Ipv4Address::new(127, 0, 0, 1),   // 必须等于 iface 绑定的地址
+        src_addr: Ipv4Address::new(127, 0, 0, 2),
+        dst_addr: Ipv4Address::new(127, 0, 0, 1),
         next_header: IpProtocol::Tcp,
         payload_len: tcp_repr.buffer_len(),
         hop_limit: 64,
@@ -287,9 +287,8 @@ fuzz_target!(|data: &[u8]| {
     let mut conns = Vec::new();
     let mut i = 0;
 
-    // 最多 3 个连接（太多会压死正常路径）
     while i < data.len() && conns.len() < 3 {
-        let len = (data[i] as usize % 40) + 5; // 每个连接最多 40 bytes
+        let len = (data[i] as usize % 40) + 5;
         let end = (i + len).min(data.len());
         conns.push(parse_framed_packets(&data[i..end]));
         i = end;

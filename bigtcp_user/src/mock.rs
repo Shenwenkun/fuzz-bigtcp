@@ -48,12 +48,10 @@ impl smoltcp::phy::TxToken for MockTxTokenEmpty {
 }
 
 
-//
-// 7. MockDeviceWithRxIp —— 支持 fuzz 输入作为收到的网络包
-//
+// 7. MockDeviceWithRxIp
 pub struct MockDeviceWithRxIp {
     pub packet: Option<Vec<u8>>,
-    pub tx_packets: Vec<Vec<u8>>,   // ★ 新增：保存 TX 包
+    pub tx_packets: Vec<Vec<u8>>,
 }
 
 impl MockDeviceWithRxIp {

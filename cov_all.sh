@@ -4,7 +4,6 @@ set -e
 echo "[1] 清理旧覆盖率..."
 cargo llvm-cov clean
 
-# fuzz_target_1~5，如果以后增加可以继续加
 TARGETS=(
     fuzz_target_1
     fuzz_target_2

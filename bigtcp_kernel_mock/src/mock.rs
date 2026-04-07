@@ -1,16 +1,13 @@
 use std::sync::{Mutex, MutexGuard};
 use std::marker::PhantomData;
 
-//
+
 // 1. Mock BottomHalfDisabled
-//
 #[derive(Clone, Copy, Debug)]
 pub struct BottomHalfDisabled;
 
-//
+
 // 2. Mock SpinLock<T, Ctx>
-//    注意：lock() 必须返回 SpinLockGuard，而不是 MutexGuard
-//
 pub struct SpinLock<T, Ctx = ()> {
     inner: Mutex<T>,
     _marker: PhantomData<Ctx>,
@@ -32,9 +29,7 @@ impl<T, Ctx> SpinLock<T, Ctx> {
     }
 }
 
-//
 // 2.1 Mock SpinLockGuard
-//
 pub struct SpinLockGuard<'a, T, Ctx = ()> {
     pub(crate) guard: MutexGuard<'a, T>,
     pub(crate) _marker: PhantomData<Ctx>,
@@ -53,9 +48,7 @@ impl<'a, T, Ctx> std::ops::DerefMut for SpinLockGuard<'a, T, Ctx> {
     }
 }
 
-//
 // 3. Mock SoftIRQ
-//
 #[derive(Clone, Copy, Debug)]
 pub struct SoftIrq;
 
@@ -69,9 +62,7 @@ impl SoftIrq {
     }
 }
 
-//
 // 4. Mock Time
-//
 pub struct Time;
 
 impl Time {
@@ -83,9 +74,7 @@ impl Time {
     }
 }
 
-//
 // 5. Mock Device
-//
 pub struct FakeDevice;
 
 impl FakeDevice {
@@ -98,9 +87,7 @@ impl FakeDevice {
     }
 }
 
-//
 // 6. Mock Jiffies
-//
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static MOCK_JIFFIES: AtomicU64 = AtomicU64::new(0);
