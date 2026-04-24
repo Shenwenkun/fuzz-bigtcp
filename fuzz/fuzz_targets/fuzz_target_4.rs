@@ -9,8 +9,6 @@ use bigtcp_kernel_mock::mock::Jiffies;
 use aster_bigtcp::iface::Iface;
 use std::sync::Arc;
 use smoltcp::wire::TcpTimestampRepr;
-
-// -------------------- TCP 构造器 --------------------
 use smoltcp::wire::{TcpControl, Ipv4Repr, TcpRepr};
 use smoltcp::phy::ChecksumCapabilities;
 
@@ -30,7 +28,6 @@ fn build_syn(payload: &[u8]) -> Vec<u8> {
         ack_number: None,
         window_len: 1024,
 
-        // 你的版本新增字段（必须全部填）
         window_scale: None,
         max_seg_size: None,
         sack_permitted: false,
@@ -90,7 +87,6 @@ fn build_tcp_with_control(
     }
 
     let seq = u32::from_le_bytes(payload[0..4].try_into().unwrap());
-    // let ack = u32::from_le_bytes(payload[4..8].try_into().unwrap());
     let data = &payload[8..];
 
     let use_wrong = seq % 5 == 0;
@@ -107,7 +103,6 @@ fn build_tcp_with_control(
         (normal_seq, normal_ack)
     };
 
-    // ---- 阶段 5：SACK / timestamp / window_scale fuzzing ----
     let r = payload.len() as u32;
 
     // 10% 概率启用 SACK permitted
@@ -193,7 +188,6 @@ fn build_tcp_with_control(
             &ChecksumCapabilities::default(),
         );
     }
-
     buffer
 }
 
@@ -284,11 +278,12 @@ fuzz_target!(|data: &[u8]| {
     let dev = MockWithDeviceWithRxIp::new();
     let dev_handle = dev.dev.clone();   // Arc<Mutex<MockDeviceWithRxIp>>
 
+    // -------------------- 1. 按连接切 data（保留你原来的 TLV 思路，稍微放宽一点） --------------------
     let mut conns = Vec::new();
     let mut i = 0;
 
-    while i < data.len() && conns.len() < 3 {
-        let len = (data[i] as usize % 40) + 5;
+    while i < data.len() && conns.len() < 4 {
+        let len = (data[i] as usize % 60) + 5;
         let end = (i + len).min(data.len());
         conns.push(parse_framed_packets(&data[i..end]));
         i = end;
@@ -296,7 +291,7 @@ fuzz_target!(|data: &[u8]| {
 
     let mut extra_payloads: Vec<Vec<u8>> = Vec::new();
 
-
+    // -------------------- 2. 对每个“连接”的 TLV 包做强化变换（沿用 + 小幅增强） --------------------
     for packets in &mut conns {
         if packets.is_empty() {
             continue;
@@ -305,83 +300,66 @@ fuzz_target!(|data: &[u8]| {
         let payload = packets[0].1;
         let r = payload.len() as u32;
 
-        // ---- DATA 注入（10%）----
+        // DATA 注入
         if r % 10 == 0 {
             packets.push((0x05, packets[0].1));
         }
 
-        // ---- FIN 注入（3%）----
+        // FIN 注入
         if r % 30 == 0 {
             packets.push((0x03, packets[0].1));
         }
 
-        // ---- RST 注入（3%）----
+        // RST 注入
         if r % 30 == 1 {
             packets.push((0x04, packets[0].1));
         }
 
-        // ---- 大 payload 注入（10%）----
+        // 大 payload 注入
         if r % 10 == 1 && payload.len() < 1500 {
             let mut big = Vec::from(payload);
             big.resize(1500, 0x41);
             extra_payloads.push(big);
-            // 关键：用 raw pointer 避免 borrow checker 冲突
+
             let ptr = extra_payloads.last().unwrap().as_ptr();
             let len = extra_payloads.last().unwrap().len();
-
-            // 现在 big_ref 不再借用 extra_payloads，而是独立的 slice
             let big_ref: &[u8] = unsafe { std::slice::from_raw_parts(ptr, len) };
 
             packets.push((0x05, big_ref));
         }
 
+        // SYN flood
         if r % 20 == 0 {
-            let syn_flood_count = (r % 20) as usize; // 0~19 个额外 SYN
+            let syn_flood_count = (r % 20) as usize;
             for _ in 0..syn_flood_count {
-                packets.push((0x01, &[])); // 0x01 = SYN
+                packets.push((0x01, &[])); // SYN
             }
         }
 
-        // ---- 阶段 8：多次 FIN/RST/错误 seq 交错 ----
-        // 5% 概率触发 deep state fuzzing
+        // 深度状态 fuzz：多次 FIN/RST/DATA 交错
         if r % 20 == 1 {
-            let repeat = (r % 5) + 2; // 重复 2~6 次
+            let repeat = (r % 5) + 2;
 
             for _ in 0..repeat {
-                // 多次 FIN
                 if r % 3 == 0 {
-                    packets.push((0x03, packets[0].1));
+                    packets.push((0x03, packets[0].1)); // FIN
                 }
-
-                // 多次 RST
                 if r % 3 == 1 {
-                    packets.push((0x04, packets[0].1));
+                    packets.push((0x04, packets[0].1)); // RST
                 }
-
-                // 多次 DATA（可能触发窗口滑动）
                 if r % 3 == 2 {
-                    packets.push((0x05, packets[0].1));
+                    packets.push((0x05, packets[0].1)); // DATA
                 }
             }
         }
-    }
 
-
-    let mut last_server_seq: Option<i32> = None;
-
-
-    {
-        let mut inner = dev.dev.lock().unwrap();
-        for conn in &conns {
-
-            for (ptype, payload) in conn {
-                let pkt = build_tcp_packet(*ptype, payload, last_server_seq);
-                inner.inject(&pkt);
-            }
+        // 新增：偶尔反转包顺序，制造乱序场景
+        if r % 13 == 0 {
+            packets.reverse();
         }
-
     }
 
+    // -------------------- 3. 构造 iface + listener（完全沿用你原来的写法） --------------------
     let iface: Arc<dyn Iface<MockExt>> =
         IpIface::<MockWithDeviceWithRxIp, MockExt>::new(
             dev,
@@ -392,8 +370,6 @@ fuzz_target!(|data: &[u8]| {
             InterfaceFlags::empty(),
         );
 
-    // 键：创建 TCP listener
-    
     use aster_bigtcp::socket::TcpListener;
     use aster_bigtcp::iface::BindPortConfig;
     use aster_bigtcp::socket::RawTcpOption;
@@ -416,47 +392,72 @@ fuzz_target!(|data: &[u8]| {
         Err((_bound, _err)) => return,
     };
 
-    
-
+    // -------------------- 4. 多轮“发包 → poll → 从 TX 抓 SYN+ACK → 反馈 seq” --------------------
     let mut now = 0u64;
+    let mut last_server_seq: Option<i32> = None;
 
-    
+    // 轮数基于输入控制，避免死循环
+    let rounds = if data.len() > 0 {
+        2 + (data[0] as usize % 4) // 2~5 轮
+    } else {
+        3
+    };
 
-
-    for _ in 0..200 {
-        iface.poll();
-        let jump = now % 7 == 0; // 大约 1/7 概率
-        if jump {
-            now += 2000; // 触发 RTO
-        } else {
-            now += 10;   // 正常时间推进
-        }
-        Jiffies::set(now);
-
-        // 从 TX 捕获 SYN+ACK，更新 last_server_seq
+    for _round in 0..rounds {
+        // 4.1 用当前 last_server_seq 构造一轮所有要注入的 TCP 包
         {
-            let mut guard = dev_handle.lock().unwrap();
-            let txs = guard.take_tx_packets();
-            drop(guard);
-
-            for pkt in txs {
-                if let Some((_ip, tcp)) = parse_ipv4_tcp(&pkt) {
-                    if tcp.control == TcpControl::Syn && tcp.ack_number.is_some() {
-                        last_server_seq = Some(tcp.seq_number.0);
+            let mut inner = dev_handle.lock().unwrap();
+            for conn in &conns {
+                for (ptype, payload) in conn {
+                    let pkt = build_tcp_packet(*ptype, payload, last_server_seq);
+                    if !pkt.is_empty() {
+                        inner.inject(&pkt);
                     }
                 }
             }
         }
 
+        // 4.2 对这一轮做一段时间的 poll + 时间推进 + 从 TX 抓 SYN+ACK
+        let per_round_iters = 50;
+
+        for _ in 0..per_round_iters {
+            iface.poll();
+
+            let jump = now % 7 == 0;
+            if jump {
+                now += 2000; // 触发 RTO
+            } else {
+                now += 10;
+            }
+            Jiffies::set(now);
+
+            // 从 TX 捕获 SYN+ACK，更新 last_server_seq
+            {
+                let mut guard = dev_handle.lock().unwrap();
+                let txs = guard.take_tx_packets();
+                drop(guard);
+
+                for pkt in txs {
+                    if let Some((_ip, tcp)) = parse_ipv4_tcp(&pkt) {
+                        if tcp.control == TcpControl::Syn && tcp.ack_number.is_some() {
+                            last_server_seq = Some(tcp.seq_number.0);
+                        }
+                    }
+                }
+            }
+
+            if now > 1_000_000 {
+                break;
+            }
+        }
 
         if now > 1_000_000 {
             break;
         }
     }
-    
+
+    // -------------------- 5. 收尾：关闭 listener，再 poll 一次 --------------------
     listener.close();
-
     iface.poll();
-
     drop(listener);
 });
