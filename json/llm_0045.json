@@ -1,0 +1,274 @@
+[
+    {
+        "ptype": 1,
+        "seq": 123456,
+        "ack": 789012,
+        "win": 4096,
+        "flags": 0,
+        "mss": 1460,
+        "sack_perm": true,
+        "tsval": 345678,
+        "tsecr": 987654,
+        "sack_ranges": [
+            [200,500],
+            null,
+            null
+        ],
+        "payload_hex": "abcd1234"
+    },
+    {
+        "ptype": 2,
+        "seq": 654321,
+        "ack": 543210,
+        "win": 3840,
+        "flags": 1,
+        "mss": 1234,
+        "sack_perm": false,
+        "tsval": 987654,
+        "tsecr": 345678,
+        "sack_ranges": [
+            [100,300],
+            null,
+            null
+        ],
+        "payload_hex": "efgh5678"
+    },
+    {
+        "ptype": 3,
+        "seq": 999999,
+        "ack": 222222,
+        "win": 1024,
+        "flags": 2,
+        "mss": 512,
+        "sack_perm": true,
+        "tsval": 876543,
+        "tsecr": 456789,
+        "sack_ranges": [
+            [700,900],
+            null,
+            null
+        ],
+        "payload_hex": "ijkl9abc"
+    },
+    {
+        "ptype": 4,
+        "seq": 123456,
+        "ack": 789012,
+        "win": 2048,
+        "flags": 3,
+        "mss": 890,
+        "sack_perm": false,
+        "tsval": 654321,
+        "tsecr": 123456,
+        "sack_ranges": [
+            [50,250],
+            null,
+            null
+        ],
+        "payload_hex": "mnopddef"
+    },
+    {
+        "ptype": 5,
+        "seq": 987654,
+        "ack": 345678,
+        "win": 3072,
+        "flags": 4,
+        "mss": 1024,
+        "sack_perm": true,
+        "tsval": 432109,
+        "tsecr": 908765,
+        "sack_ranges": [
+            [400,600],
+            null,
+            null
+        ],
+        "payload_hex": "qrstgfas"
+    },
+    {
+        "ptype": 1,
+        "seq": 345678,
+        "ack": 901234,
+        "win": 2560,
+        "flags": 5,
+        "mss": 1280,
+        "sack_perm": false,
+        "tsval": 210987,
+        "tsecr": 654321,
+        "sack_ranges": [
+            [30,130],
+            null,
+            null
+        ],
+        "payload_hex": "uvwxhjkl"
+    },
+    {
+        "ptype": 2,
+        "seq": 876543,
+        "ack": 543210,
+        "win": 1536,
+        "flags": 6,
+        "mss": 960,
+        "sack_perm": true,
+        "tsval": 543210,
+        "tsecr": 876543,
+        "sack_ranges": [
+            [150,250],
+            null,
+            null
+        ],
+        "payload_hex": "yzabqwer"
+    },
+    {
+        "ptype": 3,
+        "seq": 456789,
+        "ack": 123456,
+        "win": 640,
+        "flags": 7,
+        "mss": 640,
+        "sack_perm": false,
+        "tsval": 765432,
+        "tsecr": 321098,
+        "sack_ranges": [
+            [260,360],
+            null,
+            null
+        ],
+        "payload_hex": "cdefijkl"
+    },
+    {
+        "ptype": 4,
+        "seq": 567890,
+        "ack": 234567,
+        "win": 131072,
+        "flags": 8,
+        "mss": 400,
+        "sack_perm": true,
+        "tsval": 321098,
+        "tsecr": 765432,
+        "sack_ranges": [
+            [10,110],
+            null,
+            null
+        ],
+        "payload_hex": "ghijklmn"
+    },
+    {
+        "ptype": 5,
+        "seq": 678901,
+        "ack": 345678,
+        "win": 262144,
+        "flags": 9,
+        "mss": 200,
+        "sack_perm": false,
+        "tsval": 654321,
+        "tsecr": 123456,
+        "sack_ranges": [
+            [120,220],
+            null,
+            null
+        ],
+        "payload_hex": "opqrstuv"
+    },
+    {
+        "ptype": 1,
+        "seq": 789012,
+        "ack": 456789,
+        "win": 32768,
+        "flags": 10,
+        "mss": 1400,
+        "sack_perm": true,
+        "tsval": 987654,
+        "tsecr": 321098,
+        "sack_ranges": [
+            [230,330],
+            null,
+            null
+        ],
+        "payload_hex": "vwxyzabc"
+    },
+    {
+        "ptype": 2,
+        "seq": 890123,
+        "ack": 567890,
+        "win": 4096,
+        "flags": 11,
+        "mss": 1000,
+        "sack_perm": false,
+        "tsval": 543210,
+        "tsecr": 987654,
+        "sack_ranges": [
+            [130,230],
+            null,
+            null
+        ],
+        "payload_hex": "defghijk"
+    },
+    {
+        "ptype": 3,
+        "seq": 901234,
+        "ack": 678901,
+        "win": 512,
+        "flags": 12,
+        "mss": 500,
+        "sack_perm": true,
+        "tsval": 456789,
+        "tsecr": 654321,
+        "sack_ranges": [
+            [240,340],
+            null,
+            null
+        ],
+        "payload_hex": "klmnopqr"
+    },
+    {
+        "ptype": 4,
+        "seq": 912345,
+        "ack": 789012,
+        "win": 6144,
+        "flags": 13,
+        "mss": 700,
+        "sack_perm": false,
+        "tsval": 654321,
+        "tsecr": 987654,
+        "sack_ranges": [
+            [140,240],
+            null,
+            null
+        ],
+        "payload_hex": "qrstuvwxyz"
+    },
+    {
+        "ptype": 5,
+        "seq": 923456,
+        "ack": 890123,
+        "win": 7168,
+        "flags": 14,
+        "mss": 800,
+        "sack_perm": true,
+        "tsval": 765432,
+        "tsecr": 543210,
+        "sack_ranges": [
+            [250,350],
+            null,
+            null
+        ],
+        "payload_hex": "rstuvwxyz"
+    },
+    {
+        "ptype": 1,
+        "seq": 934567,
+        "ack": 901234,
+        "win": 8192,
+        "flags": 15,
+        "mss": 900,
+        "sack_perm": false,
+        "tsval": 876543,
+        "tsecr": 456789,
+        "sack_ranges": [
+            [150,250],
+            null,
+            null
+        ],
+        "payload_hex": "abcd1234"
+    }
+]

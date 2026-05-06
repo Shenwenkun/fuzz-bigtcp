@@ -1,0 +1,87 @@
+[
+    {
+        "ptype": 1,
+        "seq": 123456789,
+        "ack": 987654321,
+        "win": 1024,
+        "flags": 0,
+        "mss": 1460,
+        "sack_perm": true,
+        "tsval": 111111111,
+        "tsecr": 222222222,
+        "sack_ranges": [
+            [1000,2000],
+            null,
+            null
+        ],
+        "payload_hex": "abcd1234"
+    },
+    {
+        "ptype": 2,
+        "seq": 6789101112,
+        "ack": 34567890,
+        "win": 65535,
+        "flags": 128,
+        "mss": 1200,
+        "sack_perm": false,
+        "tsval": 333333333,
+        "tsecr": 444444444,
+        "sack_ranges": [
+            null,
+            [3000,4000],
+            null
+        ],
+        "payload_hex": "5678efgh"
+    },
+    {
+        "ptype": 3,
+        "seq": 1212121212,
+        "ack": 2121212121,
+        "win": 3072,
+        "flags": 64,
+        "mss": 800,
+        "sack_perm": true,
+        "tsval": 555555555,
+        "tsecr": 666666666,
+        "sack_ranges": [
+            null,
+            null,
+            [7000,8000]
+        ],
+        "payload_hex": "ijklmnop"
+    },
+    {
+        "ptype": 4,
+        "seq": 1312312312,
+        "ack": 9123123129,
+        "win": 5120,
+        "flags": 160,
+        "mss": 1000,
+        "sack_perm": false,
+        "tsval": 777777777,
+        "tsecr": 888888888,
+        "sack_ranges": [
+            [9000,10000],
+            null,
+            null
+        ],
+        "payload_hex": "qrstuvwx"
+    },
+    {
+        "ptype": 5,
+        "seq": 2345678901,
+        "ack": 4567890123,
+        "win": 2048,
+        "flags": 32,
+        "mss": 1300,
+        "sack_perm": true,
+        "tsval": 999999999,
+        "tsecr": 1010101010,
+        "sack_ranges": [
+            null,
+            [11000,12000],
+            null
+        ],
+        "payload_hex": "yz012345"
+    }
+]
