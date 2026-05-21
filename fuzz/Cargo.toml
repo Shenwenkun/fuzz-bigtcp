@@ -72,6 +72,13 @@ doc = false
 bench = false
 
 [[bin]] 
+name = "fuzz_target_8" 
+path = "./fuzz_targets/fuzz_target_8.rs" 
+test = false 
+doc = false 
+bench = false
+
+[[bin]] 
 name = "llm_fuzz_target_4" 
 path = "./fuzz_targets/llm_fuzz_target_4.rs" 
 test = false 
@@ -79,8 +86,8 @@ doc = false
 bench = false
 
 [[bin]] 
-name = "llm_fuzz_target_5" 
-path = "./fuzz_targets/llm_fuzz_target_5.rs" 
+name = "llm_fuzz_target_8" 
+path = "./fuzz_targets/llm_fuzz_target_8.rs" 
 test = false 
 doc = false 
 bench = false

@@ -1,60 +1,19 @@
-import subprocess
+import requests
 import json
 import os
 import binascii
 import re
 import struct
 
-MODEL = "qwen2.5:7b-instruct"
+OLLAMA_HOST = "http://192.168.137.1:11434"
+MODEL = "qwen2.5:14b-instruct"
+
 OUT_JSON_DIR = "./json"
 OUT_BIN_DIR = "./fuzz/corpus/llm_fuzz_target_4"
-NUM_FILES = 50
 
 os.makedirs(OUT_JSON_DIR, exist_ok=True)
 os.makedirs(OUT_BIN_DIR, exist_ok=True)
 
-PROMPT = """
-You MUST output ONLY a JSON array. No explanations. No comments. No text outside JSON.
-
-The JSON array MUST contain 8–20 packets.
-Each packet MUST strictly follow this exact template:
-
-{
-  "ptype": 1,
-  "seq": 123,
-  "ack": 456,
-  "win": 4096,
-  "flags": 0,
-  "mss": 1460,
-  "sack_perm": true,
-  "tsval": 111,
-  "tsecr": 222,
-  "sack_ranges": [
-    [1000,2000],
-    null,
-    null
-  ],
-  "payload_hex": "abcd1234"
-}
-
-STRICT RULES:
-- Output ONLY the JSON array.
-- ptype MUST be one of: 1,2,3,4,5.
-- seq and ack MUST be integers 0–4294967295.
-- win MUST be 0–65535.
-- flags MUST be 0–255.
-- mss MUST be 0–1500.
-- sack_perm MUST be true or false.
-- tsval/tsecr MUST be integers 0–4294967295.
-- sack_ranges MUST be EXACTLY 3 elements, each either [start,end] or null.
-- payload_hex MUST be a valid hex string (0–200 bytes).
-- NO trailing commas.
-- NO missing fields.
-- NO extra fields.
-- NO text outside JSON.
-
-Now output ONLY the JSON array.
-"""
 
 def fix_hex(s: str) -> str:
     s = s.strip().lower()
@@ -63,43 +22,59 @@ def fix_hex(s: str) -> str:
         s = "0" + s
     return s
 
-def extract_json_array(text: str) -> str:
-    match = re.search(r'\[.*\]', text, flags=re.S)
-    if not match:
-        raise ValueError("LLM 输出中未找到 JSON 数组")
-    return match.group(0)
+
+def parse_llm_fields(text: str):
+    result = {}
+
+    for line in text.splitlines():
+        if "=" not in line:
+            continue
+
+        key, val = line.split("=", 1)
+        key = key.strip()
+        val = val.strip()
+
+        if key in ["ptype", "seq", "ack", "win", "flags", "mss", "tsval", "tsecr"]:
+            try:
+                result[key] = int(val)
+            except:
+                result[key] = 0
+
+        elif key == "sack_perm":
+            result[key] = (val.lower() == "true")
+
+        elif key == "sack_ranges":
+            if val == "none":
+                result[key] = [None, None, None]
+            else:
+                ranges = []
+                for r in val.split(","):
+                    if "-" in r:
+                        start, end = r.split("-")
+                        ranges.append((int(start), int(end)))
+                while len(ranges) < 3:
+                    ranges.append(None)
+                result[key] = ranges
+
+        elif key == "payload_hex":
+            result[key] = fix_hex(val)
+
+    return result
+
 
 def encode_packet(item):
-    """
-    Encode one LLM packet into the TLV format required by fuzz_target:
+    ptype = item.get("ptype", 0) & 0xFF
+    seq = item.get("seq", 0) & 0xFFFFFFFF
+    ack = item.get("ack", 0) & 0xFFFFFFFF
+    win = item.get("win", 0) & 0xFFFF
+    flags = item.get("flags", 0) & 0xFF
+    mss = item.get("mss", 0) & 0xFFFF
+    sack_perm = 1 if item.get("sack_perm", False) else 0
+    tsval = item.get("tsval", 0) & 0xFFFFFFFF
+    tsecr = item.get("tsecr", 0) & 0xFFFFFFFF
 
-    [ptype:1]
-    [seq:4]
-    [ack:4]
-    [win:2]
-    [flags:1]
-    [mss:2]
-    [sack_perm:1]
-    [tsval:4]
-    [tsecr:4]
-    [sack_ranges: 3 * (start:4 + end:4)]
-    [payload_len:2]
-    [payload]
-    """
-
-    ptype = item["ptype"] & 0xFF
-    seq = item["seq"] & 0xFFFFFFFF
-    ack = item["ack"] & 0xFFFFFFFF
-    win = item["win"] & 0xFFFF
-    flags = item["flags"] & 0xFF
-    mss = item["mss"] & 0xFFFF
-    sack_perm = 1 if item["sack_perm"] else 0
-    tsval = item["tsval"] & 0xFFFFFFFF
-    tsecr = item["tsecr"] & 0xFFFFFFFF
-
-    # SACK ranges
     sack_bytes = b""
-    for r in item["sack_ranges"]:
+    for r in item.get("sack_ranges", [None, None, None]):
         if r is None:
             sack_bytes += struct.pack("<II", 0, 0)
         else:
@@ -120,52 +95,57 @@ def encode_packet(item):
 
     return header + payload
 
-
-i = 1
-success = 0
-
-while success < NUM_FILES:
-    print(f"\n=== Generating corpus {success+1}/{NUM_FILES} ===")
-
-    result = subprocess.run(
-        ["ollama", "run", MODEL],
-        input=PROMPT.encode("utf-8"),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
-    )
-
-    raw_output = result.stdout.decode("utf-8").strip()
-
+def generate_llm_json_and_bin(prompt: str, index: int):
+    print(f"\n=== LLM generation round {index} ===")
     try:
-        json_text = extract_json_array(raw_output)
-    except Exception:
-        print("❌ 未找到 JSON 数组，重试")
-        continue
-
-    try:
-        data = json.loads(json_text)
-    except Exception:
-        print("❌ JSON 格式错误，重试")
-        continue
-
-    json_path = os.path.join(OUT_JSON_DIR, f"llm_{i:04d}.json")
-    with open(json_path, "w") as f:
-        f.write(json_text)
-    print(f"[OK] Saved JSON → {json_path}")
-
-    bin_path = os.path.join(OUT_BIN_DIR, f"llm_{i:04d}.bin")
-    try:
-        with open(bin_path, "wb") as f:
-            for item in data:
-                pkt = encode_packet(item)
-                f.write(pkt)
+        resp = requests.post(
+            f"{OLLAMA_HOST}/api/generate",
+            json={"model": MODEL, "prompt": prompt},
+            timeout=120
+        )
     except Exception as e:
-        print("❌ 转换失败:", e)
-        continue
+        print("[!] Error calling Ollama:", e)
+        return None, None
 
-    print(f"[OK] Converted → {bin_path}")
+    if resp.status_code != 200:
+        print("[!] Ollama returned error:", resp.text)
+        return None, None
 
-    i += 1
-    success += 1
+    # Parse NDJSON streaming output from Ollama
+    raw_output = ""
+    for line in resp.iter_lines():
+        if not line:
+            continue
+        try:
+            obj = json.loads(line.decode("utf-8"))
+            raw_output += obj.get("response", "")
+        except:
+            continue
 
-print("\nAll corpus generated and converted!")
+    raw_output = raw_output.strip()
+
+
+    if not raw_output:
+        print("[!] Empty LLM output, skipping")
+        return None, None
+
+    fields = parse_llm_fields(raw_output)
+    if not fields:
+        print("[!] Failed to parse fields, skipping")
+        return None, None
+
+    json_data = [fields]
+    json_path = os.path.join(OUT_JSON_DIR, f"llm_{index:04d}.json")
+    with open(json_path, "w") as f:
+        json.dump(json_data, f, indent=2)
+
+
+    bin_path = os.path.join(OUT_BIN_DIR, f"llm_{index:04d}.bin")
+    with open(bin_path, "wb") as f:
+        pkt = encode_packet(fields)
+        f.write(pkt)
+
+    print(f"[OK] JSON saved → {json_path}")
+    print(f"[OK] BIN saved  → {bin_path}")
+
+    return json_path, bin_path
